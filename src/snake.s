@@ -13,6 +13,7 @@ width resb 1
 height resb 1
 cells resb 2
 buffer resb 1
+direction resd 1 ;4 bytes
 
 
 section .text
@@ -83,25 +84,7 @@ render:
 
 	JMP render
 
-update:
-	CMP byte [snake+1],0
-	JBE exit
-
-	MOV al,[snake+1]
-	MOV bl,[width]
-	MUL bl
-	MOV bl,[snake]
-	XOR bh,bh
-	ADD ax,bx
-
-	LEA edi,[board]
-	MOVZX eax,ax
-	ADD edi,eax
-
-	MOV byte [edi],'.'
-
-	SUB byte [snake+1],1 ; new position
-
+set_on_board:
 	MOV al,[snake+1]
 	MOV bl,[width]
 	MUL bl
@@ -117,6 +100,85 @@ update:
 	LEA edi,[board]
 
 	JMP render
+
+left:
+	SUB byte [snake],1
+	MOV dword [direction],left
+	JMP set_on_board
+
+up:
+	SUB byte [snake+1],1
+	MOV dword [direction],up
+	JMP set_on_board
+
+right:
+	ADD byte [snake],1
+	MOV dword [direction],right
+	JMP set_on_board
+
+down:
+	ADD byte [snake+1],1
+	MOV dword [direction],down
+	JMP set_on_board
+
+JMP_dir:
+	JMP [direction]
+
+get_key:
+	MOV eax,3
+	MOV ebx,0
+	MOV ecx,buffer
+	MOV edx,1
+	INT 0x80
+
+	CMP eax,0
+	JL JMP_dir
+
+	CMP byte [buffer],'w'
+	JE up
+
+	CMP byte [buffer],'a'
+	JE left
+
+	CMP byte [buffer],'s'
+	JE down
+
+	CMP byte [buffer],'d'
+	JE right
+
+	JMP get_key
+
+update:
+	CMP byte [snake+1],0
+	JBE exit
+
+	MOV al,[height]
+	SUB al,1
+	CMP [snake+1],al
+	JAE exit
+
+	CMP byte [snake],0
+	JBE exit
+
+	MOV al,[width]
+	SUB al,1
+	CMP [snake],al
+	JAE exit
+
+	MOV al,[snake+1]
+	MOV bl,[width]
+	MUL bl
+	MOV bl,[snake]
+	XOR bh,bh
+	ADD ax,bx
+
+	LEA edi,[board]
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV byte [edi],'.'
+
+	JMP get_key
 
 
 start_GameLoop:
@@ -184,6 +246,22 @@ _start:
 	MOV ecx,0x5402
 	MOV edx,term_raw
 	INT 0x80
+
+	MOV eax,55
+	MOV ebx,0
+	MOV ecx,3
+	MOV edx,0
+	INT 0x80
+
+	OR eax,0x800
+
+	MOV ebx,0
+	MOV ecx,4
+	MOV edx,eax
+	MOV eax,55
+	INT 0x80
+
+	MOV dword [direction],up
 
 	MOV byte [width],20
 	MOV byte [height],20
