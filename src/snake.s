@@ -8,6 +8,7 @@ ts:
 apple: times 2 DB 0
 
 section .bss
+apple_pos_buf resb 2
 board resb 10000
 snake resb 40000
 turn_points resb 3000
@@ -85,32 +86,6 @@ render:
 
 	JMP render
 
-set_on_board:
-	MOV al,[snake+ecx+1]
-	MOV bl,[width]
-	MUL bl
-	MOV bl,[snake+ecx]
-	XOR bh,bh
-	ADD ax,bx
-
-	LEA edi,[board]
-	MOVZX eax,ax
-	ADD edi,eax
-
-	MOV byte [edi],'#'
-	LEA edi,[board]
-
-	MOV ax,cx
-	MOV bx,3
-	XOR dx,dx
-	DIV bx
-
-	CMP ax,[snake_count]
-	JE render
-
-	ADD cx,3
-	JMP set_on_board
-
 move_to_up:
 	SUB byte [snake+ecx+1],1
 	JMP snake_loop
@@ -128,23 +103,23 @@ move_to_down:
 	JMP snake_loop
 
 move_to:
-	CMP [snake+ecx+2],'u'
+	CMP byte [snake+ecx+2],'u'
 	JE move_to_up
 
-	CMP [snake+ecx+2],'l'
+	CMP byte [snake+ecx+2],'l'
 	JE move_to_left
 
-	CMP [snake+ecx+2],'d'
+	CMP byte [snake+ecx+2],'d'
 	JE move_to_down
 
-	CMP [snake+ecx+2],'r'
+	CMP byte [snake+ecx+2],'r'
 	JE move_to_right
 
 before_set_on_board:
 	XOR ecx,ecx
 	MOV word [esp],0
 
-	JMP set_on_board
+	JMP apple_save
 
 snake_loop:
 	MOV ax,cx
@@ -172,54 +147,25 @@ y_equal:
 	CMP [snake+ecx+1],al
 	JE set_dir
 
-set_turn:
-	MOV al,[snake+ecx+3]
-	CMP word [turn_count],al
-	JBE move_to
-
-	LEA edi,[turn_points]
-
-	MOV al,[snake+ecx+3]
-	MOV bl,3
-	MUL bl
-	MOVZX eax,ax
-
-	ADD edi,eax
-	MOV al,[edi]
-
-	CMP [snake+ecx],al
-	JE y_equal
-
 	JMP move_to
 
-down:
-	LEA edi,[turn_points]
-
-	MOV ax,[turn_count]
-	MOV bx,3
-	MUL bx
-	MOVZX eax,ax
-	ADD edi,eax
-
-	MOV al,[snake]
-	MOV [edi],al
-
-	MOV al,[snake+1]
-	MOV [edi+1],al
-
-	MOV byte [edi+2],'d'
-
-	ADD byte [snake+1],1
-
-	ADD word [turn_count],1
-
-	JMP get_apple
-
-
-; recolocar de forma randomizada la manzana
-; colocar la manzana en el tablero
-
 random_pos_apple:
+	MOV eax,355
+	MOV ebx,apple_pos_buf
+	MOV ecx,2
+	MOV edx,0
+	INT 0x80
+
+	MOV al,[apple_pos_buf]
+	XOR ah,ah
+	DIV byte [width]
+	MOV [apple],ah
+
+	MOV al,[apple_pos_buf+1]
+	XOR ah,ah
+	DIV byte [height]
+	MOV [apple+1],ah
+
 	JMP set_turn
 
 left_dir_seg_realloc:
@@ -258,17 +204,38 @@ add_segment:
 	MOV al,[edi]
 	MOV [edi+4],al
 
-	CMP [edi+6],'u'
+	CMP byte [edi+6],'u'
 	JE up_dir_seg_realloc
 
-	CMP [edi+6],'l'
+	CMP byte [edi+6],'l'
 	JE left_dir_seg_realloc
 
-	CMP [edi+6],'d'
+	CMP byte [edi+6],'d'
 	JE down_dir_seg_realloc
 
-	CMP [edi+6],'r'
+	CMP byte [edi+6],'r'
 	JE right_dir_seg_realloc
+
+set_turn:
+	MOV al,[snake+ecx+3]
+	XOR ah,ah
+	CMP [turn_count],ax
+	JBE move_to
+
+	LEA edi,[turn_points]
+
+	MOV al,[snake+ecx+3]
+	MOV bl,3
+	MUL bl
+	MOVZX eax,ax
+
+	ADD edi,eax
+	MOV al,[edi]
+
+	CMP [snake+ecx],al
+	JE y_equal
+
+	JMP move_to
 
 get_apple:
 	MOV al,[apple]
@@ -284,6 +251,109 @@ get_apple:
 	XOR ecx,ecx
 	JMP set_turn
 
+
+right:
+	LEA edi,[turn_points]
+
+	MOV ax,[turn_count]
+	MOV bx,3
+	MUL bx
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV al,[snake]
+	MOV [edi],al
+
+	MOV al,[snake+1]
+	MOV [edi+1],al
+
+	MOV byte [edi+2],'r'
+
+	ADD byte [snake],1
+	MOV byte [snake+2],'r'
+
+	ADD word [turn_count],1
+
+	XOR ecx,ecx
+	JMP snake_loop
+
+
+left:
+	LEA edi,[turn_points]
+
+	MOV ax,[turn_count]
+	MOV bx,3
+	MUL bx
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV al,[snake]
+	MOV [edi],al
+
+	MOV al,[snake+1]
+	MOV [edi+1],al
+
+	MOV byte [edi+2],'l'
+
+	SUB byte [snake],1
+	MOV byte [snake+2],'l'
+
+	ADD word [turn_count],1
+
+	XOR ecx,ecx
+	JMP snake_loop
+
+
+up:
+	LEA edi,[turn_points]
+
+	MOV ax,[turn_count]
+	MOV bx,3
+	MUL bx
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV al,[snake]
+	MOV [edi],al
+
+	MOV al,[snake+1]
+	MOV [edi+1],al
+
+	MOV byte [edi+2],'u'
+
+	SUB byte [snake+1],1
+	MOV byte [snake+2],'u'
+
+	ADD word [turn_count],1
+
+	XOR ecx,ecx
+	JMP snake_loop
+
+down:
+	LEA edi,[turn_points]
+
+	MOV ax,[turn_count]
+	MOV bx,3
+	MUL bx
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV al,[snake]
+	MOV [edi],al
+
+	MOV al,[snake+1]
+	MOV [edi+1],al
+
+	MOV byte [edi+2],'d'
+
+	ADD byte [snake+1],1
+	MOV byte [snake+2],'d'
+
+	ADD word [turn_count],1
+
+	XOR ecx,ecx
+	JMP snake_loop
+
 get_key:
 	MOV eax,3
 	MOV ebx,0
@@ -291,8 +361,9 @@ get_key:
 	MOV edx,1
 	INT 0x80
 
+	XOR ecx,ecx
 	CMP eax,0
-	JL move_snake
+	JL set_turn
 
 	CMP byte [buffer],'w'
 	JE up
@@ -333,7 +404,6 @@ clear_snake:
 	ADD cx,4
 	JMP clear_snake
 
-
 update:
 	CMP byte [snake+1],0
 	JBE exit
@@ -354,6 +424,22 @@ update:
 	XOR ecx,ecx
 	JMP clear_snake
 
+apple_save:
+	MOV al,[apple+1]
+	MOV bl,[width]
+	MUL bl
+	MOV bl,[apple]
+	XOR bh,bh
+	ADD ax,bx
+
+	LEA edi,[board]
+	MOVZX eax,ax
+	ADD edi,eax
+
+	MOV byte [edi],'@'
+
+	JMP snake_save
+
 snake_save:
 	MOV al,[snake+ecx+1]
 	MOV bl,[width]
@@ -372,6 +458,7 @@ snake_save:
 	XOR dx,dx
 	DIV bx
 
+	LEA edi,[board]
 	CMP ax,[snake_count]
 	JE render
 
@@ -391,14 +478,21 @@ start_GameLoop:
 	MOV byte [snake+6],'u'
 	MOV byte [snake+7],0
 
-	ADD word [snake_count],1
+	ADD word [snake_count],1 ; +1 (r: 1)
+
+	MOV byte [snake+8],10
+	MOV byte [snake+9],12
+	MOV byte [snake+10],'u'
+	MOV byte [snake+11],0
+
+	ADD word [snake_count],1 ; +1 (r: 2)
 
 	MOV word [turn_count],0
 
 	LEA edi,[board]
 	XOR ecx,ecx
 
-	JMP snake_save
+	JMP apple_save
 
 save:
 	SUB word [esp],1
@@ -459,8 +553,6 @@ _start:
 	MOV edx,eax
 	MOV eax,55
 	INT 0x80
-
-	MOV dword [direction],up
 
 	MOV byte [width],20
 	MOV byte [height],20
